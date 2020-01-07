@@ -1,0 +1,97 @@
+README for src_vipa version 2
+
+utz.bacher@de.ibm.com
+
+src_vipa is provided under the terms of the enclosed common public license
+("agreement"). Any use, reproduction or distribution of the program
+constitutes recipient's acceptance of this agreement.
+
+
+Package contents:
+=================
+
+The src_vipa package includes the following files:
+LICENSE         Common Public License Version 1.0
+README          this readme
+Makefile        src_vipa's Makefile
+src_vipa.c      src_vipa's source code
+src_vipa.8      src_vipa's manual page
+
+
+Changes in version 2:
+=====================
+
+src_vipa 2 supports multiple VIPAs per destination and several policies
+how the VIPAs are distributed over several connections. See the man page
+(man ./src_vipa.8 or man src_vipa) for rationale and details.
+Note, that the layout of the configuration file has changed since the
+1.x versions - see the migration section below and the man page.
+
+
+Installation:
+=============
+
+For installation by hand, you might want to change the paths in the
+Makefile (clean paths would be:
+SRC_VIPA_PATH=/usr/lib
+SRC_VIPA_STARTER_PATH=/usr/sbin
+), at least you should check them. Make sure that the starter script is
+in the path, when you want to start applications.
+
+make
+make install
+
+
+The config file:
+================
+
+Please see the man page (man ./src_vipa.8 or man src_vipa) for details
+about configuring src_vipa.
+
+
+Migration from earlier versions:
+================================
+The layout of the configuration file has changed. Please see the man
+page (man ./src_vipa.8 or man src_vipa) for details.
+Check your syslog (usually in /var/log/messages) for problems the first
+times you use a new version.
+
+
+Usage:
+======
+
+src_vipa.sh <application incl. parameters>
+
+This enables the application which is started with source VIPA functionality.
+The config file is read once at the starting of the application. You can
+even change the starter script and have multiple applications run using
+different src_vipa settings by having different environment variables
+SRC_VIPA_CONFIG_FILE.
+
+
+Restrictions:
+=============
+
+LD_PRELOAD security prevents setuid executables to be executed under
+src_vipa; that kind of programs can only be executed when the real UID is 0.
+ping usually is installed setuid.
+The maximum number of VIPAs per destination is defined as 8.
+Only user space applications can be made use src_vipa. Kernel code does
+not care about this package.
+
+
+Alternatives:
+=============
+
+The tool ip can tweak the routing table ("ip route x src y"). Less
+flexible, sometimes less powerful, but does source VIPA as well.
+
+
+Copyright and License:
+======================
+
+Copyright IBM Corp. 2001, 2013
+
+THE ACCOMPANYING PROGRAM IS PROVIDED UNDER THE TERMS OF THE ENCLOSED COMMON
+PUBLIC LICENSE ("AGREEMENT"). ANY USE, REPRODUCTION OR DISTRIBUTION OF THE
+PROGRAM CONSTITUTES RECIPIENT'S ACCEPTANCE OF THIS AGREEMENT.

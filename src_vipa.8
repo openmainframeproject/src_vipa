@@ -1,0 +1,198 @@
+.TH SRC_VIPA 8 "Mo Feb 07 2005"
+.UC 4
+.SH NAME
+src_vipa \- flexible source address selection
+.SH SYNOPSIS
+\fBsrc_vipa.sh\fR \fIprogram\fR \fIparams\fR
+.SH DESCRIPTION
+src_vipa.sh starts \fIprogram\fR using \fIparams\fR as parameters, if
+specified. The program will use source address selection as described by
+the rules in the configuration file. The default configuration file is
+\fI/etc/src_vipa.conf\fR. If the environment variable
+\fISRC_VIPA_CONFIG_FILE\fR is defined, its content specifies the
+configuration file used for src_vipa.
+
+.SH CONFIGURATION FILE
+
+Please note that the layout of the configuration file has changed: the
+policy was added in 2.x versions.
+
+\fI/etc/src_vipa.conf\fR or, if the environment variable
+\fISRC_VIPA_CONFIG_FILE\fR is defined, the file specified in
+\fISRC_VIPA_CONFIG_FILE\fR contains lines that
+look like these three lines:
+
+ # comment
+ ADDR_DEST/MASK POLICY ADDR_SRC1 [ADDR_SRC2 [...]]
+ .INADDR_ANY P1-P2 POLICY ADDR_SRC1 [ADDR_SRC2 [...]]
+ .INADDR_ANY P POLICY ADDR_SRC1 [ADDR_SRC2 [...]]
+
+.TP
+\fB#\fR
+Lines starting with \fB#\fR are ignored
+
+.TP
+\fBADDR_DEST, ADDR_SRC1 [ADDR_SRC2 [...]]\fR
+addresses IPv4 or IPv6.
+
+.TP
+\fBADDR_DEST/MASK\fR
+(\fIMASK\fR is the number of set bits in the subnet mask)
+specifies a range of destination addresses. As soon as a socket is opened
+and connected to these destination addresses and the application does \fBnot\fR
+do an explicit bind to a source address, \fBsrc_vipa\fR does a bind to all the
+addresses specified as \fIADDR_SRC1 [ADDR_SRC2 [...]]\fR, using the
+specified \fIPOLICY\fR to distribute the used source addresses.
+See \fIPOLICIES\fR
+below for available load distribution policies. Instead of IP addresses
+in dotted notation, hostnames can be used which will be resolved using DNS.
+
+.TP
+\fB\&.INADDR_ANY P1-P2 POLICY ADDR_SRC1 [ADDR_SRC2 [...]]\fR
+and
+
+.TP
+\fB\&.INADDR_ANY P POLICY ADDR_SRC1 [ADDR_SRC2 [...]]\fR
+will cause bind calls with \fIINADDR_ANY\fR as local address to be
+intercepted, if the port the socket is bound on is between \fIP1\fR and
+\fIP2\fR (including \fIP1\fR and \fIP2\fR). In that case, \fBINADDR_ANY\fR
+will be replaced by one of the addresses
+\fIADDR_SRC1 [ADDR_SRC2 [...]]\fR (which can be 0.0.0.0 or ::). \fIPOLICY\fR
+is used to select, which one source address will be used.
+\fB.INADDR_ANY\fR statements will be read and evaluated in order of
+appearance. That means, two \fB.INADDR_ANY\fR statements can be used
+to make bind be intercepted for every port except for a certain range.
+This is useful e. g. for rlogin which uses bind to bind to a local port
+but uses \fBINADDR_ANY\fR as source address to use automatic source
+address selection. See \fIPOLICIES\fR
+below for available load distribution policies.
+Please note that the maximum port number is currently 65535.
+
+The default behaviour for all ports is, that the kind of bind calls will not
+be modified.
+
+Note, src_vipa support only IPv4 or only IPv6 sessions. Joint usage of
+IPv4 and IPv6 addresses within a single rule in the config file is impermissible.
+src_vipa prefers IPv4-entry than IPv6_entry in this case. It helps to keep over
+old config useable.
+.TP
+\fBPriorities of the two types of rules:\fR
+
+If an application does first a bind call with \fBINADDR_ANY\fR and an 
+\fB.INADDR_ANY\fR rule is defined with a matching port range, the 
+\fB.INADDR_ANY\fR rule is used.  In this case any \fIADDR_DEST/MASK\fR
+rules are ignored. If no matching \fB.INADDR_ANY\fR rule exists or the 
+application does not call bind at all. The \fIADDR_DEST/MASK\fR rule is 
+used, if the target address of the progam's connect call matches. 
+
+.SH POLICIES
+Several source addresses can be specified for one destination. The specified
+policy will be used to select the source address out of all the specified
+ones, when src_vipa replaces the source address of a socket.
+The rationale behind several source addresses lies in the inability of
+some OS kernels to do load balancing of several connections with the same
+source and destination address over several interfaces. E.g. in Linux 2.4,
+a routing entry in the routing cache table is created that always leads
+connections over the same interface based on IP but not on port basis.
+Several VIPAs can then be used to create several routing cache entries for
+the same destination, but with a different VIPA as source. Luck will assign
+different interfaces to these entries. This is a way to do load balancing
+between multi-linked servers on a VIPA basis, when bonding is not an option
+or desired.
+
+.TP
+\fBonevipa\fR
+Only and always the first address of all specified source address will be
+used as source address.
+
+.TP
+\fBrandom\fR
+The source address used by src_vipa is selected randomly from all specified
+source addresses.
+
+.TP
+\fBlrr\fR
+stands for local round robin; the source address used by src_vipa is
+selected in a round robin fashion
+among all source addresses specified. The round robin takes place on a
+per-invocation base -- each process will get its source addresses round
+robin independently from other processes.
+
+.TP
+\fBrr:ABC\fR
+stands for round robin and implements a global round robin over all
+src_vipa instances sharing the same configuration file. All src_vipa'ed
+processes share an IPC shared memory segment to fulfil a global round
+robin algorithm. This shared memory segment is destroyed when the last
+running src_vipa goes away. However, if this process does not terminate
+gracefully (e.g. is killed), the shared memory segment (size: 4 bytes)
+can stay in memory until it is removed by \fBipcrm\fR. The
+tool \fBipcs\fR can be used to display all IPC ressources and get
+the key or id used for \fBipcrm\fR.
+\fBABC\fR are unix permissions in octal writing (e.g. 700) that are used
+to create the shared memory segment. This permision mask should be as
+restrictive as possible; a process having access to this mask could in
+the worst case create an imbalance of the round robin distribution.
+
+.TP
+\fBlc\fR
+a policy that attempts to balance the number of connections per source
+address. It always associates the socket with the VIPA that is least
+in use.
+
+If the policy cannot be parsed correctly, the policy will be set to round
+robin per default
+
+
+.SH MIGRATION FROM EARLIER VERSIONS
+Please note that the layout of the configuration file has changed: a
+policy is now required. If you migrate from earlier versions of src_vipa
+and don't need multiple VIPAs, the use of the \fBonevipa\fR policy,
+followed by your VIPA is the recommended change.
+Check your syslog (usually in /var/log/messages) for problems the first
+times you use a new version.
+
+
+.SH ENVIRONMENT
+.B SRC_VIPA_CONFIG_FILE
+specifies an alternate configuration file. If not set,
+\fI/etc/src_vipa.conf\fR will be used.
+
+
+.SH RESTRICTIONS
+.B LD_PRELOAD security
+prevents setuid executables to be executed under src_vipa; that kind
+of programs can only be executed when the real UID is 0. Please note,
+that the \fBping\fR utility is usually installed with setuid permissions.
+
+.B The maximum number of VIPAs per destination
+is defined as 8.
+
+Only applications are supported, which call explicitly the libc call bind() 
+with INADDR_ANY or connect() without a preceding bind(). E.g. programs using 
+the rcmd() function are not supported.
+
+.SH FURTHER NOTES
+When using the zebra routing daemon and multiple VIPAs, make sure, that
+zebra is configured using --enable-multipath=0 (or the number of
+multiple paths you need) and --enable-netlink.
+
+
+.SH FILES
+.B /etc/src_vipa.conf
+is the default configuration file for src_vipa.
+
+.SH SEE ALSO
+The iproute2 package (command line utility \fBip\fR) is able to
+modify source address selection on a route basis in the kernel FIB.
+
+.SH COPYRIGHT
+Copyright IBM Corp. 2001, 2013
+
+Published under the terms and conditions of the CPL
+(common public license).
+
+See the file LICENSE provided with the package for a copy of the CPL.
+
+.SH AUTHOR
+This man page was written by Utz Bacher <utz.bacher@de.ibm.com>
